@@ -1,139 +1,230 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Interactive 3D Cube</title>
-<style>
-  :root {
-    --size: 200px; /* Cube size */
-  }
-
-  body {
-    margin: 0;
-    height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: radial-gradient(circle at center, #0a0a0a, #1a1a1a);
-    overflow: hidden;
-    user-select: none; /* prevent text selection while dragging */
-  }
-
-  .scene {
-    width: 300px;
-    height: 300px;
-    perspective: 800px; /* Controls depth */
-  }
-
-  .cube {
-    width: var(--size);
-    height: var(--size);
-    position: relative;
-    transform-style: preserve-3d;
-    transform: rotateX(-20deg) rotateY(30deg);
-    transition: transform 0.1s linear;
-    cursor: grab;
-  }
-
-  .cube:active {
-    cursor: grabbing;
-  }
-
-  .face {
-    position: absolute;
-    width: var(--size);
-    height: var(--size);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: sans-serif;
-    font-weight: bold;
-    color: white;
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    background: rgba(0, 100, 255, 0.6);
-    backdrop-filter: blur(4px);
-    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.3);
-  }
-
-  .front  { transform: translateZ(calc(var(--size) / 2)); background: #ff4757; }
-  .back   { transform: rotateY(180deg) translateZ(calc(var(--size) / 2)); background: #1e90ff; }
-  .right  { transform: rotateY(90deg) translateZ(calc(var(--size) / 2)); background: #2ed573; }
-  .left   { transform: rotateY(-90deg) translateZ(calc(var(--size) / 2)); background: #ffa502; }
-  .top    { transform: rotateX(90deg) translateZ(calc(var(--size) / 2)); background: #70a1ff; }
-  .bottom { transform: rotateX(-90deg) translateZ(calc(var(--size) / 2)); background: #ff7f50; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive 3D Cube with Three.js</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            width: 100vw;
+            height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            overflow: hidden;
+        }
+        #canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            pointer-events: none;
+        }
+        .info p {
+            margin: 5px 0;
+        }
+    </style>
 </head>
 <body>
-  <div class="scene">
-    <div class="cube" id="cube">
-      <div class="face front">Front</div>
-      <div class="face back">Back</div>
-      <div class="face right">Right</div>
-      <div class="face left">Left</div>
-      <div class="face top">Top</div>
-      <div class="face bottom">Bottom</div>
+    <div class="info">
+        <p>🖱️ Drag to rotate • Scroll to zoom</p>
+        <p>Double-click to reset</p>
     </div>
-  </div>
 
-  <script>
-    const cube = document.getElementById('cube');
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Scene setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFShadowShadowMap;
+        renderer.setClearColor(0x000000, 0);
+        document.body.appendChild(renderer.domElement);
 
-    let isDragging = false;
-    let startX, startY;
-    let rotateX = -20, rotateY = 30; // initial rotation
+        camera.position.z = 3;
 
-    // mouse down → start rotating
-    document.addEventListener('mousedown', (e) => {
-      isDragging = true;
-      startX = e.clientX;
-      startY = e.clientY;
-    });
+        // Create cube with proper geometry
+        const geometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+        
+        const colors = [0xff4757, 0x1e90ff, 0x2ed573, 0xffa502, 0x70a1ff, 0xff7f50];
+        const emissives = [0x220000, 0x001122, 0x002200, 0x220800, 0x001144, 0x220800];
+        const labels = ['Front', 'Back', 'Right', 'Left', 'Top', 'Bottom'];
+        
+        // Create individual canvas for each face
+        const createFaceTexture = (label, colorHex) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            
+            // Fill background with color
+            ctx.fillStyle = new THREE.Color(colorHex).getStyle();
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw text centered
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 100px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+            ctx.shadowBlur = 10;
+            ctx.shadowOffsetX = 2;
+            ctx.shadowOffsetY = 2;
+            ctx.fillText(label, 256, 256);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.magFilter = THREE.LinearFilter;
+            texture.minFilter = THREE.LinearFilter;
+            return texture;
+        };
+        
+        const materials = labels.map((label, i) => 
+            new THREE.MeshStandardMaterial({
+                map: createFaceTexture(label, colors[i]),
+                color: colors[i],
+                roughness: 0.3,
+                metalness: 0.2,
+                emissive: emissives[i]
+            })
+        );
 
-    // mouse move → calculate new rotation
-    document.addEventListener('mousemove', (e) => {
-      if (!isDragging) return;
-      const deltaX = e.clientX - startX;
-      const deltaY = e.clientY - startY;
+        const cube = new THREE.Mesh(geometry, materials);
+        cube.castShadow = true;
+        cube.receiveShadow = true;
+        scene.add(cube);
 
-      rotateY += deltaX * 0.4; // horizontal = Y rotation
-      rotateX -= deltaY * 0.4; // vertical = X rotation
+        // Lighting setup
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
 
-      cube.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 5, 7);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.width = 2048;
+        directionalLight.shadow.mapSize.height = 2048;
+        directionalLight.shadow.camera.near = 0.5;
+        directionalLight.shadow.camera.far = 50;
+        directionalLight.shadow.camera.left = -10;
+        directionalLight.shadow.camera.right = 10;
+        directionalLight.shadow.camera.top = 10;
+        directionalLight.shadow.camera.bottom = -10;
+        scene.add(directionalLight);
 
-      startX = e.clientX;
-      startY = e.clientY;
-    });
+        const pointLight = new THREE.PointLight(0xff00ff, 0.4);
+        pointLight.position.set(-5, 3, 5);
+        scene.add(pointLight);
 
-    // stop rotating when mouse released
-    document.addEventListener('mouseup', () => {
-      isDragging = false;
-    });
+        // Interactive controls
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+        let velocity = { x: 0, y: 0 };
 
-    // touch support (mobile)
-    document.addEventListener('touchstart', (e) => {
-      isDragging = true;
-      startX = e.touches[0].clientX;
-      startY = e.touches[0].clientY;
-    });
+        document.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+        });
 
-    document.addEventListener('touchmove', (e) => {
-      if (!isDragging) return;
-      const deltaX = e.touches[0].clientX - startX;
-      const deltaY = e.touches[0].clientY - startY;
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) {
+                velocity.x *= 0.95;
+                velocity.y *= 0.95;
+                return;
+            }
 
-      rotateY += deltaX * 0.4;
-      rotateX -= deltaY * 0.4;
+            const deltaX = e.clientX - previousMousePosition.x;
+            const deltaY = e.clientY - previousMousePosition.y;
 
-      cube.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+            velocity.x = deltaX * 0.01;
+            velocity.y = deltaY * 0.01;
 
-      startX = e.touches[0].clientX;
-      startY = e.touches[0].clientY;
-    });
+            cube.rotation.y += velocity.x;
+            cube.rotation.x += velocity.y;
 
-    document.addEventListener('touchend', () => {
-      isDragging = false;
-    });
-  </script>
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        // Scroll to zoom
+        document.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            camera.position.z += e.deltaY * 0.001;
+            camera.position.z = Math.max(1, Math.min(10, camera.position.z));
+        }, { passive: false });
+
+        // Double-click to reset
+        document.addEventListener('dblclick', () => {
+            cube.rotation.x = 0.3;
+            cube.rotation.y = 0.3;
+            camera.position.z = 3;
+            velocity = { x: 0, y: 0 };
+        });
+
+        // Touch support for mobile
+        let touchStartX = 0, touchStartY = 0;
+
+        document.addEventListener('touchstart', (e) => {
+            isDragging = true;
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        });
+
+        document.addEventListener('touchmove', (e) => {
+            if (!isDragging) return;
+            
+            const deltaX = e.touches[0].clientX - touchStartX;
+            const deltaY = e.touches[0].clientY - touchStartY;
+
+            velocity.x = deltaX * 0.01;
+            velocity.y = deltaY * 0.01;
+
+            cube.rotation.y += velocity.x;
+            cube.rotation.x += velocity.y;
+
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        });
+
+        document.addEventListener('touchend', () => {
+            isDragging = false;
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (!isDragging) {
+                cube.rotation.y += velocity.x;
+                cube.rotation.x += velocity.y;
+                velocity.x *= 0.98;
+                velocity.y *= 0.98;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+    </script>
 </body>
 </html>

@@ -22,15 +22,6 @@ This project uses **pure web technologies** with no external libraries.
 
 ---
 
-## 📂 Project Structure
-
-interactive-3d-cube/
-│
-├── index.html
-└── README.md
-
----
-
 ## 🚀 Getting Started
 
 ### Run Locally
@@ -68,7 +59,9 @@ Change Rotation Speed
 rotateY += deltaX * 0.4;
 rotateX -= deltaY * 0.4;
 
+
 Increase or decrease the multiplier to adjust sensitivity.
+
 
 //Browser Support
 
